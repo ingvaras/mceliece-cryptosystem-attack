@@ -22,10 +22,10 @@ public class LinearAlgebraSolver {
                     A.subtract(row, col);
             }
         }
-
+        for(int i = A.getNOfColumns() - 1; i < A.getNOfRows(); i++) {
+            if(A.getValue(i, A.getNOfColumns() - 1))
+                return null;
+        }
         return A.getLastColumn();
     }
-
-
-
 }

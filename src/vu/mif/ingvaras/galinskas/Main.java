@@ -11,6 +11,7 @@ import java.util.concurrent.TimeUnit;
 public class Main {
 
     public static void main(String[] args) {
+
         for(int t = 1; t <= 7; t++) {
             McElieceParameters params = new McElieceParameters(6, t);
             McElieceKeyGenerationParameters genParams = new McElieceKeyGenerationParameters(new SecureRandom(), params);
@@ -38,7 +39,6 @@ public class Main {
 
             ErrorVectorPermutationGenerator generator = new ErrorVectorPermutationGenerator(publicKey.getT(), publicKey.getN());
 
-            ArrayList<Boolean> m = BinaryMatrix.createBinaryVector(trimString(computeMessageRepresentative(message, publicKey.getK()).toString()));
             ArrayList<Boolean> c = toLittleEndian(BinaryMatrix.createBinaryVector(byteArrayToBits(cipher)));
             BinaryMatrix G = new BinaryMatrix(publicKey.getN(), publicKey.getK(), trimString(publicKey.getG().computeTranspose().toString()));
 
@@ -46,8 +46,9 @@ public class Main {
                 ArrayList<Boolean> cGuess = addVectors(generator.nextPermutation(), c);
                 G.appendOneColumn(cGuess);
                 ArrayList<Boolean> mGuess = LinearAlgebraSolver.solveEquation(G);
-                if (m.equals(mGuess)) {
+                if (mGuess != null) {
                     System.out.println("Success");
+                    System.out.println("message found: " + convertToString(mGuess));
                     stopwatch.stop();
                     System.out.println("Time elapsed: "+ stopwatch.elapsed(TimeUnit.MILLISECONDS) + "ms\n");
                     break;
