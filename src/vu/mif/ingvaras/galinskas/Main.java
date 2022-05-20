@@ -2,18 +2,21 @@ package vu.mif.ingvaras.galinskas;
 
 import com.google.common.base.Stopwatch;
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
+import org.bouncycastle.crypto.InvalidCipherTextException;
 import org.bouncycastle.pqc.crypto.mceliece.*;
-import org.bouncycastle.pqc.math.linearalgebra.GF2Vector;
+import vu.mif.ingvaras.galinskas.attacks.*;
+import vu.mif.ingvaras.galinskas.math.MatrixOperations;
+import vu.mif.ingvaras.galinskas.math.domain.BinaryMatrix;
+
 import java.security.SecureRandom;
 import java.util.ArrayList;
-import java.util.concurrent.TimeUnit;
 
 public class Main {
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InvalidCipherTextException {
 
-        for(int t = 1; t <= 7; t++) {
-            McElieceParameters params = new McElieceParameters(6, t);
+        for(int t = 50; t <= 50; t++) {
+            McElieceParameters params = new McElieceParameters(10, t);
             McElieceKeyGenerationParameters genParams = new McElieceKeyGenerationParameters(new SecureRandom(), params);
 
             McElieceKeyPairGenerator keyGeneration = new McElieceKeyPairGenerator();
@@ -21,91 +24,79 @@ public class Main {
             AsymmetricCipherKeyPair keyPair = keyGeneration.generateKeyPair();
 
             McEliecePublicKeyParameters publicKey = (McEliecePublicKeyParameters) keyPair.getPublic();
+            McEliecePrivateKeyParameters privateKey = (McEliecePrivateKeyParameters) keyPair.getPrivate();
 
             System.out.println("n: " + publicKey.getN());
             System.out.println("k: " + publicKey.getK());
             System.out.println("t: " + publicKey.getT());
 
             McElieceCipher encrypt = new McElieceCipher();
-            encrypt.init(true, publicKey);
+            encrypt.init(true, keyPair.getPublic());
+            McElieceCipher decrypt = new McElieceCipher();
+            decrypt.init(false, privateKey);
 
-            byte[] message = {12};
-            byte[] cipher = encrypt.messageEncrypt(message);
+            byte[] message = {23, 14};
+            ArrayList<Boolean> cipher = MatrixOperations.toLittleEndian(BinaryMatrix.createBinaryVector(MatrixOperations.byteArrayToBits(encrypt.messageEncrypt(message))));
 
-            System.out.println("message: " + trimString(computeMessageRepresentative(message, publicKey.getK()).toString()));
-            System.out.println("cipher: " + convertToString(toLittleEndian(BinaryMatrix.createBinaryVector(byteArrayToBits(cipher)))));
+            System.out.println("message: " + MatrixOperations.trimString(MatrixOperations.computeMessageRepresentative(message, publicKey.getK()).toString()));
+            System.out.println("cipher: " + MatrixOperations.convertToString(cipher));
 
             Stopwatch stopwatch = Stopwatch.createStarted();
 
-            ErrorVectorPermutationGenerator generator = new ErrorVectorPermutationGenerator(publicKey.getT(), publicKey.getN());
+            System.out.println("-----BRUTE FORCE ATTACK-----");
+            CipherAttack bruteForce = BruteForceAttack.builder()
+                    .k(publicKey.getK())
+                    .n(publicKey.getN())
+                    .t(publicKey.getT())
+                    .G(publicKey.getG())
+                    .build();
 
-            ArrayList<Boolean> c = toLittleEndian(BinaryMatrix.createBinaryVector(byteArrayToBits(cipher)));
-            BinaryMatrix G = new BinaryMatrix(publicKey.getN(), publicKey.getK(), trimString(publicKey.getG().computeTranspose().toString()));
+            bruteForce.attack(cipher, stopwatch);
 
-            while (generator.hasMore()) {
-                ArrayList<Boolean> cGuess = addVectors(generator.nextPermutation(), c);
-                G.appendOneColumn(cGuess);
-                ArrayList<Boolean> mGuess = LinearAlgebraSolver.solveEquation(G);
-                if (mGuess != null) {
-                    System.out.println("Success");
-                    System.out.println("message found: " + convertToString(mGuess));
-                    stopwatch.stop();
-                    System.out.println("Time elapsed: "+ stopwatch.elapsed(TimeUnit.MILLISECONDS) + "ms\n");
-                    break;
-                }
-                G = new BinaryMatrix(publicKey.getN(), publicKey.getK(), trimString(publicKey.getG().computeTranspose().toString()));
+            System.out.println("-----MESSAGE RESEND ATTACK-----");
+            stopwatch = Stopwatch.createStarted();
+            CipherAttack messageResendAttack = MessageResendAttack.builder()
+                    .k(publicKey.getK())
+                    .n(publicKey.getN())
+                    .t(publicKey.getT())
+                    .G(publicKey.getG())
+                    .additionalCipher(MatrixOperations.toLittleEndian(BinaryMatrix.createBinaryVector(MatrixOperations.byteArrayToBits(encrypt.messageEncrypt(message)))))
+                    .build();
+
+            messageResendAttack.attack(cipher, stopwatch);*/
+
+            System.out.println("-----RECEIVER RESPONSE ATTACK-----");
+            stopwatch = Stopwatch.createStarted();
+            CipherAttack receiverResponseAttack = ReceiverResponseAttack.builder()
+                    .k(publicKey.getK())
+                    .n(publicKey.getN())
+                    .t(publicKey.getT())
+                    .G(publicKey.getG())
+                    .decrypt(decrypt)
+                    .message(message)
+                    .build();
+
+            receiverResponseAttack.attack(cipher, stopwatch);
+
+            int kr = 0;
+            for(int i = 0; i < 3; i++) {
+                System.out.println("-----PARTIALLY KNOWN TEXT ATTACK-----");
+                System.out.println(25+i*25+"%");
+                stopwatch = Stopwatch.createStarted();
+                kr += publicKey.getK()/4;
+                CipherAttack partiallyKnownTextAttack = PartiallyKnownTextAttack.builder()
+                        .k(publicKey.getK())
+                        .n(publicKey.getN())
+                        .t(publicKey.getT())
+                        .G(publicKey.getG())
+                        .kr(kr)
+                        .mr(new ArrayList<>(BinaryMatrix.createBinaryVector(MatrixOperations.trimString(MatrixOperations.computeMessageRepresentative(message, publicKey.getK()).toString())).subList(publicKey.getK() - kr, publicKey.getK())))
+                        .build();
+
+                partiallyKnownTextAttack.attack(cipher, stopwatch);
             }
         }
+
     }
 
-    public static GF2Vector computeMessageRepresentative(byte[] var1, int k) {
-        int maxLength = k >> 3;
-        byte[] var2 = new byte[maxLength + ((k & 7) != 0 ? 1 : 0)];
-        System.arraycopy(var1, 0, var2, 0, var1.length);
-        var2[var1.length] = 1;
-        return GF2Vector.OS2VP(k, var2);
-    }
-
-    public static String byteArrayToBits(byte[] bytes) {
-        StringBuilder builder = new StringBuilder();
-        for (byte b : bytes) {
-            builder.append(Integer.toBinaryString(b & 255 | 256).substring(1));
-        }
-        return builder.toString();
-    }
-
-    public static String trimString(String string) {
-        return string.replaceAll("\n[0-9]+: ", "").replaceAll("0: ", "").replaceAll(" ", "");
-    }
-
-    public static ArrayList<Boolean> addVectors(ArrayList<Boolean> a, ArrayList<Boolean> b) {
-        if(a.size() != b.size())
-            throw new ArithmeticException();
-        ArrayList<Boolean> result = new ArrayList<>();
-        for(int i = 0; i < a.size(); i++) {
-            result.add(Boolean.logicalXor(a.get(i), b.get(i)));
-        }
-        return result;
-    }
-
-    public static ArrayList<Boolean> toLittleEndian(ArrayList<Boolean> a) {
-        ArrayList<Boolean> b = new ArrayList<>();
-        for(int i = 0; i < a.size(); i+=8) {
-            for(int j = i + 7; j >= i; j--) {
-                b.add(a.get(j));
-            }
-        }
-        return b;
-    }
-
-    public static String convertToString(ArrayList<Boolean> a) {
-        StringBuilder builder = new StringBuilder();
-        for(int i = 0; i < a.size(); i++) {
-            if(a.get(i))
-                builder.append('1');
-            else
-                builder.append('0');
-        }
-        return builder.toString();
-    }
 }
