@@ -6,9 +6,9 @@ import java.util.ArrayList;
 
 public class BinaryMatrix {
 
-    private final int nOfRows;
+    private int nOfRows;
     private int nOfColumns;
-    private final String representation;
+    private String representation;
     private final ArrayList<ArrayList<Boolean>> matrix = new ArrayList<>();
 
     public BinaryMatrix(int nOfRows, int nOfColumns, String representation) {
@@ -46,6 +46,18 @@ public class BinaryMatrix {
             matrix.set(row, currentRow);
         }
         this.nOfColumns++;
+        return this;
+    }
+
+    public BinaryMatrix remove(int row) {
+        if(row == 0)
+            representation = representation.substring(this.nOfColumns);
+        else if(row == nOfRows-1)
+            representation = representation.substring(0, representation.length()-nOfColumns);
+        else
+            representation = representation.substring(0, nOfColumns * row) + representation.substring(nOfColumns + nOfColumns * row);
+        matrix.remove(row);
+        nOfRows--;
         return this;
     }
 

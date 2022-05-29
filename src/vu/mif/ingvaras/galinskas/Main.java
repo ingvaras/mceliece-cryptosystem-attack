@@ -5,15 +5,17 @@ import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
 import org.bouncycastle.crypto.InvalidCipherTextException;
 import org.bouncycastle.pqc.crypto.mceliece.*;
 import vu.mif.ingvaras.galinskas.attacks.*;
+import vu.mif.ingvaras.galinskas.math.CombinationGenerator;
 import vu.mif.ingvaras.galinskas.math.MatrixOperations;
 import vu.mif.ingvaras.galinskas.math.domain.BinaryMatrix;
 
 import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.Arrays;
 
 public class Main {
 
-    public static void main(String[] args) throws InvalidCipherTextException {
+    public static void main(String[] args) {
 
         for(int t = 50; t <= 50; t++) {
             McElieceParameters params = new McElieceParameters(10, t);
@@ -36,10 +38,12 @@ public class Main {
             decrypt.init(false, privateKey);
 
             byte[] message = {23, 14};
+            ArrayList<Boolean> messageVector = BinaryMatrix.createBinaryVector(MatrixOperations.trimString(MatrixOperations.computeMessageRepresentative(message, publicKey.getK()).toString()));
             ArrayList<Boolean> cipher = MatrixOperations.toLittleEndian(BinaryMatrix.createBinaryVector(MatrixOperations.byteArrayToBits(encrypt.messageEncrypt(message))));
 
             System.out.println("message: " + MatrixOperations.trimString(MatrixOperations.computeMessageRepresentative(message, publicKey.getK()).toString()));
             System.out.println("cipher: " + MatrixOperations.convertToString(cipher));
+
 
             Stopwatch stopwatch = Stopwatch.createStarted();
 
@@ -58,12 +62,12 @@ public class Main {
             CipherAttack messageResendAttack = MessageResendAttack.builder()
                     .k(publicKey.getK())
                     .n(publicKey.getN())
-                    .t(publicKey.getT())
+                    .message(messageVector)
                     .G(publicKey.getG())
                     .additionalCipher(MatrixOperations.toLittleEndian(BinaryMatrix.createBinaryVector(MatrixOperations.byteArrayToBits(encrypt.messageEncrypt(message)))))
                     .build();
 
-            messageResendAttack.attack(cipher, stopwatch);*/
+            messageResendAttack.attack(cipher, stopwatch);
 
             System.out.println("-----RECEIVER RESPONSE ATTACK-----");
             stopwatch = Stopwatch.createStarted();
